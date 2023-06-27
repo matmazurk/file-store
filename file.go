@@ -1,63 +1,63 @@
 package filestore
 
 import (
-	"context"
+	"path/filepath"
 
-	"github.com/pkg/errors"
-
-	"crypto"
 	"os"
 	"path"
+
+	"github.com/pkg/errors"
 )
 
 func saveFile(
-	ctx context.Context,
 	rootDir, destPath string,
 	dataCh <-chan []byte,
-) ([]byte, error) {
+) error {
 	absolutePath := path.Join(rootDir, destPath)
 	err := os.MkdirAll(absolutePath, os.ModePerm)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	f, err := os.Open(absolutePath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	md5, err := writeChunks(ctx, f, absolutePath, dataCh)
+	err = writeChunks(f, dataCh)
 	f.Close()
 	if err != nil {
 		os.Remove(absolutePath)
+		return errors.Wrapf(err, "couldn't write chunks to %s", absolutePath)
 	}
-	return md5, err
+
+	return nil
 }
 
 func writeChunks(
-	ctx context.Context,
 	f *os.File,
-	absolutePath string,
 	dataCh <-chan []byte,
-) ([]byte, error) {
-	md5 := crypto.MD5.New()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, errors.Errorf("context cancelled for %s", absolutePath)
-		case chunk, ok := <-dataCh:
-			if !ok {
-				return md5.Sum(nil), nil
-			}
-
-			_, err := f.Write(chunk)
-			if err != nil {
-				return nil, errors.Errorf("couldn't write chunk to file %s", absolutePath)
-			}
-			_, err = md5.Write(chunk)
-			if err != nil {
-				return nil, errors.Errorf("couldn't write md5 chunk for file %s", absolutePath)
-			}
+) error {
+	for chunk := range dataCh {
+		_, err := f.Write(chunk)
+		if err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func listAllFiles(rootDir string) ([]string, error) {
+	var ret []string
+	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			ret = append(ret, path)
+		}
+		return nil
+	})
+	return nil, err
 }
