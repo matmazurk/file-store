@@ -12,7 +12,7 @@ message ListFilesRequest {
 }
 
 message ListFilesResponse {
-    repeated string pathes = 1;
+    repeated string paths = 1;
 }
 
 message StoreFileMsg {
