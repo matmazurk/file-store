@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+option go_package = "github.com/matmazurk/file-store/proto";
+
+service File {
+    rpc ListFiles(ListFilesRequest) returns (ListFilesResponse) {}
+    rpc StoreFile(stream StoreFileMsg) returns (StoreFileResponse) {}
+}
+
+message ListFilesRequest {
+    string path = 1;
+}
+
+message ListFilesResponse {
+    repeated string pathes = 1;
+}
+
+message StoreFileMsg {
+    string path = 1;
+    bytes chunk_data = 2;
+    bytes md_5 = 3;
+}
+
+message StoreFileResponse {}
