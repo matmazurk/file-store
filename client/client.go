@@ -26,30 +26,30 @@ func New(
 	}
 }
 
-func (c client) SendFile(filePath string) error {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+func (c client) Send(content io.ReadCloser, destination string) error {
+	defer content.Close()
 
 	stream, err := c.c.StoreFile(context.Background())
 	if err != nil {
 		return err
 	}
+
 	md5 := crypto.MD5.New()
 	chunk := make([]byte, chunkSize)
 	for {
-		n, err := f.Read(chunk)
+		n, err := content.Read(chunk)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				chunk := chunk[:n]
 				md5.Write(chunk)
-				stream.Send(&pb.StoreFileMsg{
-					Path:      filePath,
+				err := stream.Send(&pb.StoreFileMsg{
+					Path:      destination,
 					ChunkData: chunk,
 					Md_5:      md5.Sum(nil),
 				})
+				if err != nil {
+					return err
+				}
 
 				return stream.CloseSend()
 			}
@@ -58,11 +58,20 @@ func (c client) SendFile(filePath string) error {
 		chunk := chunk[:n]
 		md5.Write(chunk)
 		err = stream.Send(&pb.StoreFileMsg{
-			Path:      filePath,
+			Path:      destination,
 			ChunkData: chunk,
 		})
 		if err != nil {
 			return err
 		}
 	}
+}
+
+func (c client) SendFile(filePath string) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+
+	return c.Send(f, filePath)
 }
