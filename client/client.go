@@ -46,6 +46,7 @@ func (c client) SendFile(filePath string) error {
 				chunk := chunk[:n]
 				md5.Write(chunk)
 				stream.Send(&pb.StoreFileMsg{
+					Path:      filePath,
 					ChunkData: chunk,
 					Md_5:      md5.Sum(nil),
 				})
