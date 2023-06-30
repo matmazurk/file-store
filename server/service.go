@@ -1,4 +1,4 @@
-package filestore
+package server
 
 import (
 	"bytes"
@@ -49,10 +49,7 @@ func (s service) StoreFile(stream pb.File_StoreFileServer) error {
 	errCh := make(chan error)
 	dataCh := make(chan []byte)
 	go func() {
-		err := saveFile(s.rootDir, path, dataCh)
-		if err != nil {
-			errCh <- err
-		}
+		errCh <- saveFile(s.rootDir, path, dataCh)
 	}()
 	md5 := crypto.MD5.New()
 	md5.Write(rec.GetChunkData())
@@ -78,7 +75,8 @@ func (s service) StoreFile(stream pb.File_StoreFileServer) error {
 	if err := <-errCh; err != nil {
 		return err
 	}
-	if !bytes.Equal(receivedMD5, md5.Sum(nil)) {
+	actMD5 := md5.Sum(nil)
+	if !bytes.Equal(receivedMD5, actMD5) {
 		return errors.New("invalid md5")
 	}
 

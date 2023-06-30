@@ -1,4 +1,4 @@
-package filestore
+package server
 
 import (
 	"path/filepath"
@@ -14,12 +14,12 @@ func saveFile(
 	dataCh <-chan []byte,
 ) error {
 	absolutePath := path.Join(rootDir, destPath)
-	err := os.MkdirAll(absolutePath, os.ModePerm)
+	err := os.MkdirAll(filepath.Dir(absolutePath), os.ModePerm)
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Open(absolutePath)
+	f, err := os.OpenFile(absolutePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -40,6 +40,7 @@ func writeChunks(
 ) error {
 	for chunk := range dataCh {
 		_, err := f.Write(chunk)
+
 		if err != nil {
 			return err
 		}
