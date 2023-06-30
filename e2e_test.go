@@ -1,69 +1,75 @@
 package test
 
 import (
-	"context"
-	"log"
-	"net"
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	fakegrpcserver "github.com/matmazurk/fake-grpc-server"
 	"github.com/matmazurk/file-store/client"
 	server "github.com/matmazurk/file-store/server"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 )
-
-var lis *bufconn.Listener
-
-const (
-	testFilesDir = "./_test-files"
-	bufSize      = 1024 * 1024
-)
-
-func bufDialer(context.Context, string) (net.Conn, error) {
-	return lis.Dial()
-}
 
 func TestService(t *testing.T) {
-	lis = bufconn.Listen(bufSize)
-	s := grpc.NewServer()
-	service := server.NewService(testFilesDir)
-	service.RegisterIn(s)
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("Server exited with error: %v", err)
-		}
-	}()
-	defer s.GracefulStop()
+	const testfilesTargetDir = "./__test"
+	service := server.NewService(testfilesTargetDir)
+	fakeServer := fakegrpcserver.NewFakeServer(func(s *grpc.Server) {
+		service.RegisterIn(s)
+	})
+	stop := fakeServer.Start()
+	defer stop()
 
-	ctx := context.Background()
-	conn, err := grpc.DialContext(
-		ctx,
-		"bufnet",
-		grpc.WithContextDialer(bufDialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-
+	conn, err := fakeServer.Conn()
+	require.NoError(t, err)
 	c := client.New(conn)
 
-	t.Run("test", func(t *testing.T) {
-		const smallFilePath = "./testfiles/small-file.txt"
-		err = c.SendFile(smallFilePath)
+	t.Run("should properly store all test files", func(t *testing.T) {
+		const testfilesDir = "./testfiles"
+		testfiles, err := os.ReadDir(testfilesDir)
 		require.NoError(t, err)
-		require.Eventually(
-			t,
-			func() bool {
-				_, err := os.Stat(filepath.Join(testFilesDir, smallFilePath))
-				return err == nil
-			},
-			time.Second,
-			time.Millisecond*100)
-	})
 
+		for _, testfile := range testfiles {
+			testfile := testfile.Name()
+			t.Run(testfile, func(t *testing.T) {
+				t.Parallel()
+
+				toSendPath := filepath.Join(testfilesDir, testfile)
+				err := c.SendFile(toSendPath)
+				require.NoError(t, err)
+
+				expectedLocationPath := filepath.Join(testfilesTargetDir, testfilesDir, testfile)
+				requireFileEventuallyPresent(t, expectedLocationPath)
+				requireFilesExact(t, toSendPath, expectedLocationPath)
+			})
+		}
+	})
+}
+
+func requireFileEventuallyPresent(t *testing.T, path string) {
+	t.Helper()
+
+	require.Eventually(
+		t,
+		func() bool {
+			_, err := os.Stat(path)
+			return err == nil
+		},
+		500*time.Millisecond,
+		50*time.Millisecond)
+}
+
+func requireFilesExact(t *testing.T, expectedPath, actualPath string) {
+	t.Helper()
+
+	expected, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+
+	actual, err := os.ReadFile(actualPath)
+	require.NoError(t, err)
+
+	require.True(t, bytes.Equal(expected, actual))
 }
