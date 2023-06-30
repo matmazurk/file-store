@@ -16,6 +16,8 @@ import (
 
 func TestService(t *testing.T) {
 	const testfilesTargetDir = "./__test"
+	defer os.RemoveAll(testfilesTargetDir)
+
 	service := server.NewService(testfilesTargetDir)
 	fakeServer := fakegrpcserver.NewFakeServer(func(s *grpc.Server) {
 		service.RegisterIn(s)
@@ -47,6 +49,9 @@ func TestService(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("sending file to existing path should override", func(t *testing.T) {
+	})
 }
 
 func requireFileEventuallyPresent(t *testing.T, path string) {
@@ -58,8 +63,8 @@ func requireFileEventuallyPresent(t *testing.T, path string) {
 			_, err := os.Stat(path)
 			return err == nil
 		},
-		500*time.Millisecond,
-		50*time.Millisecond)
+		50*time.Millisecond,
+		time.Millisecond)
 }
 
 func requireFilesExact(t *testing.T, expectedPath, actualPath string) {
