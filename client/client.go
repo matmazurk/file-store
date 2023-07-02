@@ -26,9 +26,7 @@ func New(
 	}
 }
 
-func (c client) Send(content io.ReadCloser, destination string) error {
-	defer content.Close()
-
+func (c client) Send(content io.Reader, destination string) error {
 	stream, err := c.c.StoreFile(context.Background())
 	if err != nil {
 		return err
@@ -51,7 +49,8 @@ func (c client) Send(content io.ReadCloser, destination string) error {
 					return err
 				}
 
-				return stream.CloseSend()
+				_, err = stream.CloseAndRecv()
+				return err
 			}
 		}
 
@@ -72,6 +71,7 @@ func (c client) SendFile(filePath string) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	return c.Send(f, filePath)
 }
