@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-const chunkSize = 1 << 16
+const bufSize = 1 << 16
 
 type client struct {
 	c pb.FileClient
@@ -33,17 +33,16 @@ func (c client) Send(content io.Reader, destination string) error {
 	}
 
 	md5 := crypto.MD5.New()
-	chunk := make([]byte, chunkSize)
+	buf := make([]byte, bufSize)
 	for {
-		n, err := content.Read(chunk)
+		n, err := content.Read(buf)
+		buf = buf[:n]
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				chunk := chunk[:n]
-				md5.Write(chunk)
 				err := stream.Send(&pb.StoreFileMsg{
 					Path:      destination,
-					ChunkData: chunk,
-					Md_5:      md5.Sum(nil),
+					ChunkData: buf,
+					Md_5:      md5.Sum(buf),
 				})
 				if err != nil {
 					return err
@@ -52,13 +51,14 @@ func (c client) Send(content io.Reader, destination string) error {
 				_, err = stream.CloseAndRecv()
 				return err
 			}
+
+			return err
 		}
 
-		chunk := chunk[:n]
-		md5.Write(chunk)
+		md5.Write(buf)
 		err = stream.Send(&pb.StoreFileMsg{
 			Path:      destination,
-			ChunkData: chunk,
+			ChunkData: buf,
 		})
 		if err != nil {
 			return err
