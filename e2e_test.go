@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	fakegrpcserver "github.com/matmazurk/fake-grpc-server"
 	"github.com/matmazurk/file-store/client"
@@ -15,22 +14,24 @@ import (
 )
 
 func TestService(t *testing.T) {
-	const testfilesTargetDir = "./__test"
-	defer os.RemoveAll(testfilesTargetDir)
+	const (
+		testfilesTargetDir = "./__test"
+		testfilesDir       = "./testfiles"
+	)
+	t.Cleanup(func() { os.RemoveAll(testfilesTargetDir) })
 
 	service := server.NewService(testfilesTargetDir)
 	fakeServer := fakegrpcserver.NewFakeServer(func(s *grpc.Server) {
 		service.RegisterIn(s)
 	})
 	stop := fakeServer.Start()
-	defer stop()
+	t.Cleanup(func() { stop() })
 
 	conn, err := fakeServer.Conn()
 	require.NoError(t, err)
 	c := client.New(conn)
 
 	t.Run("should properly store all test files", func(t *testing.T) {
-		const testfilesDir = "./testfiles"
 		testfiles, err := os.ReadDir(testfilesDir)
 		require.NoError(t, err)
 
@@ -44,37 +45,14 @@ func TestService(t *testing.T) {
 				require.NoError(t, err)
 
 				expectedLocationPath := filepath.Join(testfilesTargetDir, testfilesDir, testfile)
-				requireFileEventuallyPresent(t, expectedLocationPath)
-				requireFilesExact(t, toSendPath, expectedLocationPath)
+
+				expected, err := os.ReadFile(expectedLocationPath)
+				require.NoError(t, err)
+
+				actual, err := os.ReadFile(toSendPath)
+				require.NoError(t, err)
+				require.True(t, bytes.Equal(expected, actual))
 			})
 		}
 	})
-
-	t.Run("sending file to existing path should override", func(t *testing.T) {
-	})
-}
-
-func requireFileEventuallyPresent(t *testing.T, path string) {
-	t.Helper()
-
-	require.Eventually(
-		t,
-		func() bool {
-			_, err := os.Stat(path)
-			return err == nil
-		},
-		50*time.Millisecond,
-		time.Millisecond)
-}
-
-func requireFilesExact(t *testing.T, expectedPath, actualPath string) {
-	t.Helper()
-
-	expected, err := os.ReadFile(expectedPath)
-	require.NoError(t, err)
-
-	actual, err := os.ReadFile(actualPath)
-	require.NoError(t, err)
-
-	require.True(t, bytes.Equal(expected, actual))
 }
