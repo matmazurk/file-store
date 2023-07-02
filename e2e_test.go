@@ -15,8 +15,8 @@ import (
 
 func TestService(t *testing.T) {
 	const (
-		testfilesTargetDir = "./__test"
-		testfilesDir       = "./testfiles"
+		testfilesTargetDir = "__test"
+		testfilesDir       = "testfiles"
 	)
 	t.Cleanup(func() { os.RemoveAll(testfilesTargetDir) })
 
@@ -46,13 +46,37 @@ func TestService(t *testing.T) {
 
 				expectedLocationPath := filepath.Join(testfilesTargetDir, testfilesDir, testfile)
 
-				expected, err := os.ReadFile(expectedLocationPath)
-				require.NoError(t, err)
-
-				actual, err := os.ReadFile(toSendPath)
-				require.NoError(t, err)
-				require.True(t, bytes.Equal(expected, actual))
+				requireFilesExact(t, expectedLocationPath, toSendPath)
 			})
 		}
 	})
+
+	t.Run("sending file to existing path should override", func(t *testing.T) {
+		t.Parallel()
+
+		smallFilePath := filepath.Join(testfilesDir, "small-file2")
+		err := c.SendFile(smallFilePath)
+		require.NoError(t, err)
+
+		emptyFilePath := filepath.Join(testfilesDir, "empty-file2")
+		emptyFile, err := os.Open(emptyFilePath)
+		require.NoError(t, err)
+		err = c.Send(emptyFile, smallFilePath)
+		require.NoError(t, emptyFile.Close())
+		require.NoError(t, err)
+
+		requireFilesExact(t, emptyFilePath, filepath.Join(testfilesTargetDir, testfilesDir, "small-file2"))
+	})
+}
+
+func requireFilesExact(t *testing.T, expectedPath string, actualPath string) {
+	t.Helper()
+
+	expected, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+
+	actual, err := os.ReadFile(actualPath)
+	require.NoError(t, err)
+
+	require.True(t, bytes.Equal(expected, actual))
 }
